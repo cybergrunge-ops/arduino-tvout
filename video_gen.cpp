@@ -21,6 +21,12 @@
  WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  OTHER DEALINGS IN THE SOFTWARE.
+ 
+ 
+ 
+ 2021,
+ annotated by cybergrunge-ops with help from myles
+ 
 */
 
 #include <avr/interrupt.h>
@@ -36,17 +42,37 @@
 //#define REMOVE4C
 //#define REMOVE3C
 
+
+
+
 int renderLine;
 TVout_vid display;
+
+
+
+
 void (*render_line)();			//remove me
 void (*line_handler)();			//remove me
+
+
+
+
 void (*hbi_hook)() = &empty;
 void (*vbi_hook)() = &empty;
+
+
+
 
 // sound properties
 volatile long remainingToneVsyncs;
 
+
+
+
 void empty() {}
+
+
+
 
 void render_setup(uint8_t mode, uint8_t x, uint8_t y, uint8_t *scrnptr) {
 
@@ -118,14 +144,23 @@ void render_setup(uint8_t mode, uint8_t x, uint8_t y, uint8_t *scrnptr) {
 	sei();
 }
 
+
+
 // render a line
 ISR(TIMER1_OVF_vect) {
 	hbi_hook();
 	line_handler();
 }
 
+
+
+
+/*
+Myles on blank_line:
+blank_line is part of the "active" area of the display but with nothing on it, 
+this is when user code in vbi_hook() runs.
+*/
 void blank_line() {
-		
 	if ( display.scanLine == display.start_render) {
 		renderLine = 0;
 		display.vscale = display.vscale_const;
@@ -135,10 +170,25 @@ void blank_line() {
 		line_handler = &vsync_line;
 		vbi_hook();
 	}
-	
 	display.scanLine++;
 }
 
+
+
+
+
+
+
+
+
+/* 
+Myles, on active_line: 
+active_line ensures cycle accurate timing (AVR instructions take between 1 and 3? cycles to execute, 
+the interrupt has to wait for the instruction to finish)
+It does this with a call to wait_until which always returns at a set time into the video line. 
+It then renders the line by calling the render_line function 
+the render_line function is just a function pointer to one of the render_line6c, 4c, etc.
+*/
 void active_line() {
 	wait_until(display.output_delay);
 	render_line();
@@ -148,13 +198,24 @@ void active_line() {
 	}
 	else
 		display.vscale--;
-		
 	if ((display.scanLine + 1) == (int)(display.start_render + (display.vres*(display.vscale_const+1))))
 		line_handler = &blank_line;
-		
 	display.scanLine++;
 }
 
+
+
+
+
+
+
+
+/*
+Myles on vsync_line: 
+vsync_line manipulates the output compare time (OCR1A) to the vsync pulse length 
+it also generates sound. 
+At the end of the vsync lines, it restores the output compare to the horizontal sync time.
+*/
 void vsync_line() {
 	if (display.scanLine >= display.lines_frame) {
 		OCR1A = _CYCLES_VIRT_SYNC;
@@ -183,6 +244,14 @@ void vsync_line() {
 }
 
 
+
+
+
+/*
+Myles on wait_until:
+wait_until is called by active_line to wait for any avr instructions to finish
+it always returns at a set time into the video line
+*/
 static void inline wait_until(uint8_t time) {
 	__asm__ __volatile__ (
 			"subi	%[time], 10\n"
@@ -204,59 +273,84 @@ static void inline wait_until(uint8_t time) {
 	);
 }
 
+
+
+
+
+
 void render_line6c() {
-	#ifndef REMOVE6C
-	__asm__ __volatile__ (
-		"ADD	r26,r28\n\t"
-		"ADC	r27,r29\n\t"
-		//save PORTB
-		"svprt	%[port]\n\t"
-		
-		"rjmp	enter6\n"
-	"loop6:\n\t"
-		"bst	__tmp_reg__,0\n\t"			//8
-		"o1bs	%[port]\n"
+#ifndef REMOVE6C
+__asm__ __volatile__ (
+		"ADD	r26,r28\n\t"        // Add low byte
+		"ADC	r27,r29\n\t"        // Add with carry high byte
+		"svprt	%[port]\n\t"        //read port and put into r16, logical AND between r16 and vidpin and places the result in r16
+		"rjmp	enter6\n"           //relative jump to enter6
+
+	"loop6:\n\t"                    
+		"bst	__tmp_reg__,0\n\t"			//8 - store bit 0 of __tmp_reg__ (r0) to T Flag in status register (SREG)
+		"o1bs	%[port]\n"                  //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+
 	"enter6:\n\t"
-		"LD		__tmp_reg__,X+\n\t"			//1
-		"delay1\n\t"
-		"bst	__tmp_reg__,7\n\t"
-		"o1bs	%[port]\n\t"
-		"delay3\n\t"						//2
-		"bst	__tmp_reg__,6\n\t"
-		"o1bs	%[port]\n\t"
-		"delay3\n\t"						//3
-		"bst	__tmp_reg__,5\n\t"
-		"o1bs	%[port]\n\t"
-		"delay3\n\t"						//4
-		"bst	__tmp_reg__,4\n\t"
-		"o1bs	%[port]\n\t"
-		"delay3\n\t"						//5
-		"bst	__tmp_reg__,3\n\t"
-		"o1bs	%[port]\n\t"
-		"delay3\n\t"						//6
-		"bst	__tmp_reg__,2\n\t"
-		"o1bs	%[port]\n\t"
-		"delay3\n\t"						//7
-		"bst	__tmp_reg__,1\n\t"
-		"o1bs	%[port]\n\t"
-		"dec	%[hres]\n\t"
-		"brne	loop6\n\t"					//go too loopsix
-		"delay2\n\t"
-		"bst	__tmp_reg__,0\n\t"			//8
-		"o1bs	%[port]\n"
+		"LD		__tmp_reg__,X+\n\t"			//1 Load from data space using index X and put into r0
+		"delay1\n\t"                        // nop once
+		"bst	__tmp_reg__,7\n\t"          // store bit 7 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"delay3\n\t"						//2 nop three times
+		"bst	__tmp_reg__,6\n\t"          // store bit 6 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"delay3\n\t"						//3 nop three times
+		"bst	__tmp_reg__,5\n\t"          // store bit 5 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"delay3\n\t"						//4 nop three times
+		"bst	__tmp_reg__,4\n\t"          // store bit 4 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"delay3\n\t"						//5 nop three times
+		"bst	__tmp_reg__,3\n\t"          // store bit 3 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"delay3\n\t"						//6 nop three times
+		"bst	__tmp_reg__,2\n\t"          // store bit 2 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"delay3\n\t"						//7 nop three times
+		"bst	__tmp_reg__,1\n\t"          // store bit 1 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"dec	%[hres]\n\t"                // DECREMENT hres
+		"brne	loop6\n\t"					//Branch If Not Equal (go too loopsix)
+		"delay2\n\t"                        //nop twice
+		"bst	__tmp_reg__,0\n\t"			//8 store bit 0 of r0 to T Flag in SREG
+		"o1bs	%[port]\n"                  //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
 		
-		"svprt	%[port]\n\t"
-		BST_HWS
-		"o1bs	%[port]\n\t"
-		:
-		: [port] "i" (_SFR_IO_ADDR(PORT_VID)),
-		"x" (display.screen),
-		"y" (renderLine),
-		[hres] "d" (display.hres)
-		: "r16" // try to remove this clobber later...
+		"svprt	%[port]\n\t"                //read port and put into r16, logical AND between r16 and vidpin and places the result in r16
+		BST_HWS                             //macro: store bit VID_PIN of r16 to T Flag in status register (SREG)
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+
+		:   //output operand list
+            //operands are described by a constraint string, followed by a C expression in parentheses
+            //brackets give name to operand. to use operands in asm you must say % followed by the name in brackets
+
+		:   //input operand list. 
+        [port] "i" (_SFR_IO_ADDR(PORT_VID)), //in the official AVR GCC opConstraints, lowercase i is not listed as AVR specific.
+                                             //elsewhere, lower case i constraint means it is an immediate constant integer
+                                             //in AVR GCC upper case I is 6-bit positive integer, so either one works.
+                                             
+		"x" (display.screen),           //constraint pointer register x (r27:r26)
+		"y" (renderLine),               //constraint pointer register y (r29:r28)
+		[hres] "d" (display.hres)       //constraint d is r16 to r31
+
+		: //clobber list
+        "r16" //try to remove this clobber later...
 	);
 	#endif
 }
+
+
+
+
+
+
+
+
+
+
 
 void render_line5c() {
 	#ifndef REMOVE5C
@@ -264,52 +358,74 @@ void render_line5c() {
 		"ADD	r26,r28\n\t"
 		"ADC	r27,r29\n\t"
 		//save PORTB
-		"svprt	%[port]\n\t"
+		"svprt	%[port]\n\t"        //read port and put into r16, logical AND between r16 and vidpin and places the result in r16
 		
 		"rjmp	enter5\n"
 	"loop5:\n\t"
 		"bst	__tmp_reg__,0\n\t"			//8
 		"o1bs	%[port]\n"
 	"enter5:\n\t"
-		"LD		__tmp_reg__,X+\n\t"			//1
-		"bst	__tmp_reg__,7\n\t"
-		"o1bs	%[port]\n\t"
-		"delay2\n\t"						//2
-		"bst	__tmp_reg__,6\n\t"
-		"o1bs	%[port]\n\t"
-		"delay2\n\t"						//3
-		"bst	__tmp_reg__,5\n\t"
-		"o1bs	%[port]\n\t"
-		"delay2\n\t"						//4
-		"bst	__tmp_reg__,4\n\t"
-		"o1bs	%[port]\n\t"
-		"delay2\n\t"						//5
-		"bst	__tmp_reg__,3\n\t"
-		"o1bs	%[port]\n\t"
-		"delay2\n\t"						//6
-		"bst	__tmp_reg__,2\n\t"
-		"o1bs	%[port]\n\t"
-		"delay1\n\t"						//7
-		"dec	%[hres]\n\t"
-		"bst	__tmp_reg__,1\n\t"
-		"o1bs	%[port]\n\t"
+		"LD		__tmp_reg__,X+\n\t"			//1 Load from data space using index X and put into r0
+		"bst	__tmp_reg__,7\n\t"			// store bit 7 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"delay2\n\t"						//2 nop twice
+		"bst	__tmp_reg__,6\n\t"			// store bit 6 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"delay2\n\t"						//3 nop twice
+		"bst	__tmp_reg__,5\n\t"			// store bit 5 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"delay2\n\t"						//4 nop twice
+		"bst	__tmp_reg__,4\n\t"			// store bit 4 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"delay2\n\t"						//5 nop twice
+		"bst	__tmp_reg__,3\n\t"			// store bit 3 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"delay2\n\t"						//6 nop twice
+		"bst	__tmp_reg__,2\n\t"			// store bit 2 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+		"delay1\n\t"						//7 nop twice
+		"dec	%[hres]\n\t"                // DECREMENT hres
+		"bst	__tmp_reg__,1\n\t"			// store bit 1 of r0 to T Flag in SREG
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
 		"brne	loop5\n\t"					//go too loop5
-		"delay1\n\t"
-		"bst	__tmp_reg__,0\n\t"			//8
-		"o1bs	%[port]\n"
+		"delay1\n\t"                        //nop once
+		"bst	__tmp_reg__,0\n\t"			// store bit 0 of r0 to T Flag in SREG
+		"o1bs	%[port]\n"                  //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
 		
-		"svprt	%[port]\n\t"
-		BST_HWS
-		"o1bs	%[port]\n\t"
-		:
-		: [port] "i" (_SFR_IO_ADDR(PORT_VID)),
-		"x" (display.screen),
-		"y" (renderLine),
-		[hres] "d" (display.hres)
-		: "r16" // try to remove this clobber later...
+		"svprt	%[port]\n\t"                //read port and put into r16, logical AND between r16 and vidpin and places the result in r16
+		BST_HWS                             //macro: store bit VID_PIN of r16 to T Flag in status register (SREG)
+		"o1bs	%[port]\n\t"                //o1bs macro: copy T Flag to bit 0 of r16, then output PORTB to r16
+
+
+		:   //output operand list
+            //operands are described by a constraint string, followed by a C expression in parentheses
+            //brackets give name to operand. to use operands in asm you must say % followed by the name in brackets
+
+		:   //input operand list. 
+        [port] "i" (_SFR_IO_ADDR(PORT_VID)), //in the official AVR GCC opConstraints, lowercase i is not listed as AVR specific.
+                                             //elsewhere, lower case i constraint means it is an immediate constant integer
+                                             //in AVR GCC upper case I is 6-bit positive integer, so either one works.
+                                             
+		"x" (display.screen),           //constraint pointer register x (r27:r26)
+		"y" (renderLine),               //constraint pointer register y (r29:r28)
+		[hres] "d" (display.hres)       //constraint d is r16 to r31
+
+		: //clobber list
+        "r16" //try to remove this clobber later...
 	);
 	#endif
 }
+
+
+
+
+
+
+
+
+
+
+
 
 void render_line4c() {
 	#ifndef REMOVE4C
@@ -350,15 +466,38 @@ void render_line4c() {
 		"out	%[port],__tmp_reg__\n\t"
 		"delay3\n\t"
 		"cbi	%[port],7\n\t"
-		:
-		: [port] "i" (_SFR_IO_ADDR(PORT_VID)),
-		"x" (display.screen),
-		"y" (renderLine),
-		[hres] "d" (display.hres)
-		: "r16" // try to remove this clobber later...
+
+
+		:   //output operand list
+            //operands are described by a constraint string, followed by a C expression in parentheses
+            //brackets give name to operand. to use operands in asm you must say % followed by the name in brackets
+
+		:   //input operand list. 
+        [port] "i" (_SFR_IO_ADDR(PORT_VID)), //in the official AVR GCC opConstraints, lowercase i is not listed as AVR specific.
+                                             //elsewhere, lower case i constraint means it is an immediate constant integer
+                                             //in AVR GCC upper case I is 6-bit positive integer, so either one works.
+                                             
+		"x" (display.screen),           //constraint pointer register x (r27:r26)
+		"y" (renderLine),               //constraint pointer register y (r29:r28)
+		[hres] "d" (display.hres)       //constraint d is r16 to r31
+
+		: //clobber list
+        "r16" //try to remove this clobber later...
 	);
 	#endif
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 // only 16mhz right now!!!
 void render_line3c() {

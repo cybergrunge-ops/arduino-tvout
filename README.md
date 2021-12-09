@@ -22,6 +22,8 @@ AT90USB1286 | B 5 | F 7 | B 4 | -- | -- | -- | --
 
 # Some notes on functioning from Myles
 
+NOTE: This library basically ignores interlacing and draws the same frame on odd and even frames.
+
 The "sync signal" pulls the video line to 0v, that is done by Timer1 compare pin (kind of like doing pwm). 
 The "active video" signal portion sets the video line between 1v (white) and 0.3(v) black by toggling its state for each pixel.
 
@@ -31,17 +33,19 @@ Timer1 sets its output compare io pin low during the sync pulse.
 The timer1 compare match time is changed as needed to alternate between vertical and horizontal sync pulse lengths.
 
 The interrupt does two things:
-1. Call the hbi_hook, which is a function pointer for the user of the library to insert fast code
-2. Call the line_handler, which is another function pointer that will run the code for each line of video output.
+1. Call the `hbi_hook`, which is a function pointer for the user of the library to insert fast code
+2. Call the `line_handler`, which is another function pointer that will run the code for each line of video output.
 
 So you have 
-blank_line: which is part of the "active" area of the display but with nothing on it, this is basically the only time user code gets to run.
-active_line: which is the most complicated. 
-    It has ensure cycle accurate timing (AVR instructions take between 1 and 3? cycles to execute, the interrupt has to wait for the instruction to finish) it does this with a call to wait_until which always returns at a set time into the video line.
-    It then renders the line by calling the render_line function which is just a function pointer to one of the rendler_line6c 4c etc.
-vsync_line: This manipulates the output compare time to the vsync pulse length, (it also generates sound but that can be ignored). At the end of the vsync lines it restores the output compare to the horizontal sync time.
+`blank_line`: which is part of the "active" area of the display but with nothing on it, this is basically the only time user code gets to run.
+
+`active_line`: which is the most complicated. It has to ensure cycle accurate timing (AVR instructions take between 1 and 3? cycles to execute, the interrupt has to wait for the instruction to finish) it does this with a call to `wait_until` which always returns at a set time into the video line. It then renders the line by calling the `render_line` function which is just a function pointer to one of the `render_line6c`, `4c`, etc.
+
+`vsync_line`: This manipulates the output compare time to the vsync pulse length, (also generates sound). At the end of the vsync lines it restores the output compare to the horizontal sync time.
+
 Each of these handlers all count the lines and change the line_handler function pointer to the correct handler for that line number.
 
-The render_line handlers all take the frame buffer and output it on the video pin one at a time. at 20mhz there is not enough time to create a more general output for x microseconds system so I created one for each one 6c,5c,4c are all essentially the same with different numbers of nop inserted to pad out the pixel display time (delay1, delay2, delay3, etc are just macros with some nop instructions). The render_line3c is destructive in that it does not have enough time to set the pin on the port so it sets the whole port.
+The `render_line` handlers all take the frame buffer and output it on the video pin one at a time. 
+
+At 20mhz there is not enough time to create a more general output for x microseconds system so I created one for each one `6c`,`5c`,`4c` are all essentially the same with different numbers of `nop` inserted to pad out the pixel display time (`delay1`, `delay2`, `delay3`, etc are just macros with some `nop` instructions). The `render_line3c` is destructive in that it does not have enough time to set the pin on the port so it sets the whole port.
  
-One thing to note is that this basically all ignores interlacing and draws the same frame on odd and even frames.

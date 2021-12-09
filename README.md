@@ -1,16 +1,25 @@
-# Annotated TVOut library.
+# (Egregiously) Annotated TVOut Library.
 
-The goal of this repo is to provide a highly annotated version of the TVOut Library to allow beginners to understand how the library works, allowing easier experimentation, improvement and expansion of features. 
+There is a very sore lack of well-documented and accessible libraries and projects for generating video signals using avr microcontrollers. The goal of this repo is to provide a highly annotated version of the TVOut Library to allow beginners to understand how the library works, allowing easier experimentation, improvement and expansion of features. It includes some 
 
-# Original Readme Text [avamander]
+# Table of contents
+
+[Original Readme Text](#original-readme-text)
+
+[Pins & Connections](#connections)
+
+[Notes on functioning from Myles, 2021](#notes-on-functioning-from-myles-2021)
+
+[Resources & Links](#resources-and-links)
+
+
+# Original Readme Text
 
 In order to use the library, place this library's folders (`TVout` and `TVoutfonts`) in your `libraries` folder. This is a library for generating composite video on an ATmega AVR microcontroller. The goal of this project is to create a simple interrupt driven library for generating composite video on a single AVR chip. Currently the output is NTSC or PAL at a resolution of 128x96 by default. The library currently works on ATmega168,328,1280,2560,644p,1284p,32U4,AT90USB1286 and more can be added by editing spec/hardware_setup.h. There are some timing issues with the m1284p, may be related to sanguino core.
 
-## Connections
+# Connections
 
 SYNC is on OCR1A and AUDIO is on OCR2A (except on the Arduino Leonardo, where AUDIO is on OCR0A). On NG, Decimila, UNO and Nano the sync is pin 9, video on 7 and audio on 11. On Mega2560	sync is pin 11, video is on A7(D29)	and audio is on pin 10.
-
-# Microcontroller pins
 
 MCU | SYNC | VIDEO | AUDIO | Arduino | SYNC | VIDEO | AUDIO
 ---|---|---|---|---|---|---|---
@@ -19,6 +28,7 @@ m1280,m2560 | B 5 | A 7 | B 4 | Mega | 11 | A7(D29) | 10
 m644,m1284p | D 5 | A 7 | D 7 | sanguino | 13 | A7(D24) | 8
 m32u4 | B 5 | B 4 | B 7 | Leonardo | 9 | 8 | 11
 AT90USB1286 | B 5 | F 7 | B 4 | -- | -- | -- | --
+ 
 
 # Notes on functioning from Myles, 2021
 
@@ -48,8 +58,10 @@ Each of these handlers all count the lines and change the line_handler function 
 The `render_line` handlers all take the frame buffer and output it on the video pin one at a time. 
 
 At 20mhz there is not enough time to create a more general output for x microseconds system so I created one for each one `6c`,`5c`,`4c` are all essentially the same with different numbers of `nop` inserted to pad out the pixel display time (`delay1`, `delay2`, `delay3`, etc are just macros with some `nop` instructions). The `render_line3c` is destructive in that it does not have enough time to set the pin on the port so it sets the whole port.
- 
-# Resources about ASM 
+
+# Resources and links
+
+## Resources about ASM 
 
 TVout uses assembly language to directly manipulate the ports for sync pin and video pin. For beginners (like me) this assembly language is intimidating when you first look at it without knowing anything about asm. In the interest of making things easier for others, i have been doing a ton of research into assembly language, i will link here some resources that helped me a lot:
 
@@ -66,7 +78,7 @@ https://www.nongnu.org/avr-libc/user-manual/inline_asm.html
 https://www.nongnu.org/avr-libc/user-manual/assembler.html
 AVR-LibC specific manual on asm.
 
-# Resources about timers, interupts and registers
+## Resources about timers, interupts and registers
 
 TVOut uses direct manipulation of the timers and ports, and understanding how it works requires one understand how microcontrollers' Timers and Counters work.
 The biggest barrier for me in getting to understand timers, registers and counters was the fact that they involve all kinds of isoteric naming conventions, so you have to memorize what various things mean, for instance such obscure and occult names like OCRA1, TCCR1A, COM1A0, CS10, WGM12, ICR1, TOIE1, and the classic TIMSK1, among others. These names are all very funny to try to pronounce out loud, and aside from learning what they do, much Elocutionary Entertainment can be had. however, to get to the point, below i have listed some resources on how timers and all these other things work.
@@ -74,3 +86,4 @@ The biggest barrier for me in getting to understand timers, registers and counte
 https://www.gammon.com.au/timers
 https://gammon.com.au/interrupts
 Gammon.com.au is an invaluable resource, and Nick explains things very well, as well as providing some basic example programs for use with arduino!
+

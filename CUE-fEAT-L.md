@@ -4,11 +4,11 @@
 
 ## Intro
 
-I am Ellie Voyyd she/her, founder of cybergrunge.net. I am an Outsider Engineer, I am self-taught due to disability interfering with my ability to work and participate in school. So, this all might seem weird to "traditional" engineers and programmers. I also am somewhat insane and diagnosed with major depression schizophrenia and several other things, so yeah. Anyway, lets move on.
+I am Ellie Voyyd she/her, founder of [cybergrunge.net](https://cybergrunge.net). I am an Outsider Engineer, I am self-taught due to disability interfering with my ability to work and participate in school. So, this all might seem weird to "traditional" engineers and programmers. I also am somewhat insane and diagnosed with major depression, schizophrenia and several other things. Anyway, moving on..
 
 # What Is TVout?
 
-TVout was made by Myles Metzler a decade or so ago. It outputs monochrome NTSC and PAL signals, and allows some very simple functionality like sound generation, drawing simple shapes and lines, bitmaps and so on. The library uses a few conventions and methods that I am not very familiar with, like inline assembly, bitwise operations and pointers. These make it a bit less accessible to newbies, but hopefully i can explain in the commentary what is going on, step by step.
+TVout was made by Myles Metzler a decade or so ago. It uses various [8-bit](https://en.wikipedia.org/wiki/8-bit_computing) AVR [microcontrollers](https://en.wikipedia.org/wiki/Microcontroller) to output monochrome [NTSC](https://en.wikipedia.org/wiki/NTSC) and [PAL](https://en.wikipedia.org/wiki/PAL) signals, and allows some very simple functionality like sound generation, drawing simple shapes and lines, bitmaps and so on. The library uses a few conventions and methods that I am not very familiar with, like [inline assembly](https://ucexperiment.wordpress.com/2016/03/04/arduino-inline-assembly-tutorial-1/), [bitwise operations](https://youtu.be/YJgnYQEhYBw) and [pointers](https://www.gammon.com.au/callbacks). These make it a bit less [accessible](https://en.wikipedia.org/wiki/Accessibility) to newbies, but hopefully i can explain in the commentary what is going on, step by step.
 
 # Beginning Our Analysis 
 
@@ -66,6 +66,80 @@ FINALLY we come to something interesting. We have a comment saying we are about 
 
 `ISR` means this is an `Interrupt Service Routine`. As we have learned from various resources, ISR's need to be VERY short and VERY fast functions. You can see that it puts our custom function described by `hbi_hook` in, then renders the horizontal line with `line_handler`. This ISR is done for ever horizontal line.
 
-after this we will be getting into the actual video generation part!
+Next we have `blank_line`. It has an if/else which, if this is `start_render`, then set `renderLine` to 0, otherwise do `vsync_line`. After this, it simply increments `display.scanLine`.
 
-i will update this later to describe the remainder of video_gen.cpp and other stuff. need to go have a cigarette.
+Next we have `active_line`. it ensures cycle accurate timing. the `render_line` function is just a function pointer to one of the render_line6c, 4c, etc.
+
+Next, `vsync_line` manipulates the output compare time `OCR1A` to the vsync pulse length. At the end of the vsync lines, it restores `OCR1A` to the horizontal sync time. all of these things increment `display.scanLine`.
+
+### Wait_until();
+
+Now we have our very first instance of `asm`, assembly language. `wait_until` is called by `active_line` to wait for any avr instructions to finish. Lets just make sure that we first remember the syntax for assembly language:
+
+```
+__asm__ __volatile__ ("code" : OutputOperands : InputOperands : Clobbers )
+```
+
+To deconstruct assembly, make sure to always have handy the [AVR Instruction Set](http://www.mmajunke.de/doc0856.pdf). With this as reference, here is my annotation of the ASM used inside of `wait_until`:
+
+```
+__asm__ __volatile__ (
+    "subi	%[time], 10\n"              //subtracts 10 from %[time] and stores the result in %[time]
+    "sub	%[time], %[tcnt1l]\n\t"     //subtracts %[tcnt1l] from %[time] and store it in %[time]
+"100:\n\t"                              //define 100
+    "subi	%[time], 3\n\t"             //subtracts 3 from %[time] and stores the result in %[time]
+    "brcc	100b\n\t"                   //brcc (Branch If Carry Cleared) 100b
+    "subi	%[time], 0-3\n\t"           //subtracts 0-3 from %[time] and stores the result in %[time]
+    "breq	101f\n\t"                   //breq (Branch If Equal) 101f
+    "dec	%[time]\n\t"                //decrement %[time]
+    "breq	102f\n\t"                   //breq (Branch If Equal) 102f
+    "rjmp	102f\n"                     //rjmp (Relative Jump) 102f
+"101:\n\t"                              //define 101
+    "nop\n"                             //do nothing
+"102:\n"                                //define 102
+    : //no output operands
+    : [time] "a" (time), //input operands are time and TCNT1L.
+    [tcnt1l] "a" (TCNT1L) 
+	);
+
+```
+
+Even knowing what the assembly language means literally, it is difficult to understand what is actually going on here. Lets refer to Miles' explanation on what is going on:
+
+```
+wait_until is called by active_line to wait for any avr instructions to finish
+it always returns at a set time into the video line.
+```
+
+so, i need a cigarette and then im gonna take a nap ill get back to this
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

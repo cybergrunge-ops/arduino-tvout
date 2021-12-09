@@ -4,6 +4,8 @@ There is a very sore lack of well-documented and accessible libraries and projec
 
 # Table of contents
 
+[CUE-f(E)AT-L: Cybergrunge-ops Ugly Explainer for (Egregiously) Annotated Tvout Library](https://github.com/cybergrunge-ops/arduino-tvout/blob/master/CUE-fEAT-L.md)
+
 [Original Readme Text](#original-readme-text)
 
 [Pins & Connections](#connections)

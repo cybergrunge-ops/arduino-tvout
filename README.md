@@ -20,7 +20,7 @@ m644,m1284p | D 5 | A 7 | D 7 | sanguino | 13 | A7(D24) | 8
 m32u4 | B 5 | B 4 | B 7 | Leonardo | 9 | 8 | 11
 AT90USB1286 | B 5 | F 7 | B 4 | -- | -- | -- | --
 
-# Some notes on functioning from Myles
+# Notes on functioning from Myles, 2021
 
 NOTE: This library basically ignores interlacing and draws the same frame on odd and even frames.
 
@@ -49,3 +49,28 @@ The `render_line` handlers all take the frame buffer and output it on the video 
 
 At 20mhz there is not enough time to create a more general output for x microseconds system so I created one for each one `6c`,`5c`,`4c` are all essentially the same with different numbers of `nop` inserted to pad out the pixel display time (`delay1`, `delay2`, `delay3`, etc are just macros with some `nop` instructions). The `render_line3c` is destructive in that it does not have enough time to set the pin on the port so it sets the whole port.
  
+# Resources about ASM 
+
+TVout uses assembly language to directly manipulate the ports for sync pin and video pin. For beginners (like me) this assembly language is intimidating when you first look at it without knowing anything about asm. In the interest of making things easier for others, i have been doing a ton of research into assembly language, i will link here some resources that helped me a lot:
+
+https://ucexperiment.wordpress.com/2016/03/04/arduino-inline-assembly-tutorial-1/
+this is a great intro to asm that is specific to arduino. it is written pretty much in plain english that is easy to understand.
+
+https://gcc.gnu.org/onlinedocs/gcc-11.2.0/gcc/Using-Assembly-Language-with-C.html#Using-Assembly-Language-with-C
+This is the official GCC guide on asm in C. GCC is the compiler used by arduino. This stuff is a bit more obtuse to read but since it is straight from the GNU's mouth.... it is crucial to read.
+
+viznut.fi/texts-en/machine_code.pdf
+Viznut wrote a great intro to asm here
+
+https://www.nongnu.org/avr-libc/user-manual/inline_asm.html
+https://www.nongnu.org/avr-libc/user-manual/assembler.html
+AVR-LibC specific manual on asm.
+
+# Resources about timers, interupts and registers
+
+TVOut uses direct manipulation of the timers and ports, and understanding how it works requires one understand how microcontrollers' Timers and Counters work.
+The biggest barrier for me in getting to understand timers, registers and counters was the fact that they involve all kinds of isoteric naming conventions, so you have to memorize what various things mean, for instance such obscure and occult names like OCRA1, TCCR1A, COM1A0, CS10, WGM12, ICR1, TOIE1, and the classic TIMSK1, among others. These names are all very funny to try to pronounce out loud, and aside from learning what they do, much Elocutionary Entertainment can be had. however, to get to the point, below i have listed some resources on how timers and all these other things work.
+
+https://www.gammon.com.au/timers
+https://gammon.com.au/interrupts
+Gammon.com.au is an invaluable resource, and Nick explains things very well, as well as providing some basic example programs for use with arduino!
